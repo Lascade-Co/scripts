@@ -34,7 +34,7 @@ if [ "$SETUP_DEPLOYMENT" == "y" ]; then
     # save pwd in /opt/project_folder
     dirname "${SCRIPT_DIR}" | sudo tee /opt/project_folder
 
-    chmod +x deploy.sh
+    chmod +x "$SCRIPT_DIR/deploy.sh"
     sudo ln -s "$SCRIPT_DIR/deploy.sh" /bin/deploy || echo "Deployment script already linked"
     sudo ln -s "$SCRIPT_DIR/shell.sh" /bin/shell || echo "Shell script already linked"
 
