@@ -25,7 +25,7 @@ if [ -n "$1" ]; then
   git checkout $1
 fi
 
-git pull
+git pull --recurse-submodules=on-demand
 
 # Create env based on .env.sample if .env does not exist
 if [ ! -f .env ]; then
