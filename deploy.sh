@@ -75,9 +75,10 @@ if [ ! -f .env ]; then
   exec 3<&-
 fi
 
+set -a
 source .env
+set +a
 
-export $(grep -v '^#' .env | xargs)
 docker stack deploy -c swarm.docker-compose.yml "$STACK_NAME" --with-registry-auth -d
 
 echo -e "${COLOR_GREEN}Deployment successful.${NO_COLOR}"
