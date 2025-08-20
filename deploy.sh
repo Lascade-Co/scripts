@@ -102,18 +102,20 @@ if [ -n "${INFISICAL_PROJECT_ID:-}" ] && [ -n "${INFISICAL_ENV:-}" ] && [ -n "${
     --env="${INFISICAL_ENV}" \
     --domain="${SANITIZED_DOMAIN}" \
     --token="${INFISICAL_TOKEN}" > .env
+  
 else
   if [ ! -f ".env" ]; then
     err "Error: INFISICAL_* not fully provided and .env not found. Aborting."
     exit 1
   else
-    set -a
-    # shellcheck disable=SC1091
-    source .env
-    set +a
     log "Loaded variables from .env (Infisical export skipped)."
   fi
 fi
+
+set -a
+# shellcheck disable=SC1091
+source .env
+set +a
 
 docker stack deploy -c swarm.docker-compose.yml "$STACK_NAME" --with-registry-auth -d
 
