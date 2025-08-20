@@ -69,8 +69,8 @@ if [ -n "${GIT_REF:-}" ]; then
       warn "SSH Key $HOME/.ssh/github not found"
     fi
     git fetch --all --tags --prune
-    if ! git checkout "$GIT_REF"; then
-      err "Failed to checkout ref: $GIT_REF"
+    if ! (git checkout "$GIT_REF" && git pull); then
+      err "Failed to checkout and pull ref: $GIT_REF"
       exit 1
     fi
     git submodule update --init --recursive
@@ -92,7 +92,7 @@ if [ -n "${INFISICAL_PROJECT_ID:-}" ] && [ -n "${INFISICAL_ENV:-}" ] && [ -n "${
   # Sanitize domain: strip surrounding quotes and trailing slashes
   SANITIZED_DOMAIN="${INFISICAL_DOMAIN%/}"
   # Strip matching surrounding quotes
-  if [[ "${SANITIZED_DOMAIN}" =~ ^'.*'$ || "${SANITIZED_DOMAIN}" =~ ^\".*\"$ ]]; then
+  if [[ "${SANITIZED_DOMAIN}" == \'*\' || "${SANITIZED_DOMAIN}" == \"*\" ]]; then
     SANITIZED_DOMAIN="${SANITIZED_DOMAIN:1:-1}"
   fi
 
