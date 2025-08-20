@@ -69,7 +69,11 @@ if [ -n "${GIT_REF:-}" ]; then
       warn "SSH Key $HOME/.ssh/github not found"
     fi
     git fetch --all --tags --prune
-    git checkout "$GIT_REF" 2>/dev/null || git checkout "$GIT_REF"
+    if ! git checkout "$GIT_REF"; then
+      err "Failed to checkout ref: $GIT_REF"
+      exit 1
+    fi
+    git submodule update --init --recursive
     log "Checked out ref: $GIT_REF"
   else
     warn "Not a git repository at $PROJECT_FOLDER; skipping checkout of ref '$GIT_REF'"
@@ -86,8 +90,11 @@ if [ -n "${INFISICAL_PROJECT_ID:-}" ] && [ -n "${INFISICAL_ENV:-}" ] && [ -n "${
     exit 1
   fi
   # Sanitize domain: strip surrounding quotes and trailing slashes
-  SANITIZED_DOMAIN="${INFISICAL_DOMAIN%\"}"
-  SANITIZED_DOMAIN="${SANITIZED_DOMAIN#\"}"
+  SANITIZED_DOMAIN="${INFISICAL_DOMAIN%/}"
+  # Strip matching surrounding quotes
+  if [[ "${SANITIZED_DOMAIN}" =~ ^'.*'$ || "${SANITIZED_DOMAIN}" =~ ^\".*\"$ ]]; then
+    SANITIZED_DOMAIN="${SANITIZED_DOMAIN:1:-1}"
+  fi
   
   # Perform export and capture output; bail out on failure to avoid eval of error text
   if ! EXPORT_OUTPUT="$(infisical export --format=dotenv-export \
