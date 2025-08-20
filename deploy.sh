@@ -42,7 +42,7 @@ for arg in "$@"; do
       break
       ;;
     -*)
-      echo -e "${COLOR_RED}Unknown option: $arg${NO_COLOR}"
+      err "Unknown option: $arg"
       exit 1
       ;;
     *)
@@ -60,7 +60,7 @@ if [ -n "${GIT_REF:-}" ]; then
   if [ -d .git ]; then
     # Start ssh-agent only if not already present
     if [ -z "${SSH_AUTH_SOCK:-}" ]; then
-  eval "$(ssh-agent -s)"
+      eval "$(ssh-agent -s)"
     fi
     # Add GitHub key if present
     if [ -f "$HOME/.ssh/github" ]; then
@@ -86,7 +86,7 @@ fi
 if [ -n "${INFISICAL_PROJECT_ID:-}" ] && [ -n "${INFISICAL_ENV:-}" ] && [ -n "${INFISICAL_DOMAIN:-}" ] && [ -n "${INFISICAL_TOKEN:-}" ]; then
   # Ensure Infisical CLI is available before attempting export
   if ! command -v infisical &> /dev/null; then
-    echo -e "${COLOR_RED}Infisical CLI not found. Install it or provide a .env file instead.${NO_COLOR}" >&2
+    err "Infisical CLI not found. Install it or provide a .env file instead."
     exit 1
   fi
   # Sanitize domain: strip surrounding quotes and trailing slashes
@@ -95,17 +95,13 @@ if [ -n "${INFISICAL_PROJECT_ID:-}" ] && [ -n "${INFISICAL_ENV:-}" ] && [ -n "${
   if [[ "${SANITIZED_DOMAIN}" =~ ^'.*'$ || "${SANITIZED_DOMAIN}" =~ ^\".*\"$ ]]; then
     SANITIZED_DOMAIN="${SANITIZED_DOMAIN:1:-1}"
   fi
-  
+
   # Perform export and capture output; bail out on failure to avoid eval of error text
-  if ! EXPORT_OUTPUT="$(infisical export --format=dotenv-export \
-      --projectId="${INFISICAL_PROJECT_ID}" \
-      --env="${INFISICAL_ENV}" \
-      --domain="${SANITIZED_DOMAIN}" \
-      --token="${INFISICAL_TOKEN}" 2>&1)"; then
-    err "Infisical export failed:\n${EXPORT_OUTPUT}"
-    exit 1
-  fi
-  eval "${EXPORT_OUTPUT}"
+  infisical export \
+    --projectId="${INFISICAL_PROJECT_ID}" \
+    --env="${INFISICAL_ENV}" \
+    --domain="${SANITIZED_DOMAIN}" \
+    --token="${INFISICAL_TOKEN}" > .env
 else
   if [ ! -f ".env" ]; then
     err "Error: INFISICAL_* not fully provided and .env not found. Aborting."
