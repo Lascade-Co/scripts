@@ -3,8 +3,7 @@
 set -e
 
 COLOR_YELLOW='\033[1;33m'
-COLOR_BLUE='\033[1;34m'
-COLOR_RED='\033[1;31m'
+COLOR_GREEN='\033[1;32m'
 NO_COLOR='\033[0m'
 
 if [ -f /opt/project_folder ]; then
@@ -26,6 +25,10 @@ if [ -n "$1" ]; then
 fi
 
 git pull --recurse-submodules=on-demand
+
+set -a
+source .env
+set +a
 
 docker stack deploy -c swarm.docker-compose.yml "$STACK_NAME" --with-registry-auth -d
 
