@@ -24,8 +24,19 @@ fi
 CONTAINER_IDS=($(docker ps --filter "name=_${SERVICE_NAME}\." --format "{{.ID}}"))
 
 if [ ${#CONTAINER_IDS[@]} -eq 0 ]; then
-  echo "No running containers found for service ending with '${SERVICE_NAME}'."
-  exit 1
+  if [ "$COMMAND" == "restart" ]; then
+    echo "No running containers found for service ending with '${SERVICE_NAME}'. Attempting to infer stack from any running service..."
+    # Fallback: pick any running container that belongs to a Docker stack
+    FALLBACK_CONTAINER_ID=$(docker ps --filter "label=com.docker.stack.namespace" --format "{{.ID}}" | head -n 1)
+    if [ -z "$FALLBACK_CONTAINER_ID" ]; then
+      echo "No stack-labeled running containers found to infer stack. Cannot restart '${SERVICE_NAME}'."
+      exit 1
+    fi
+    CONTAINER_ID="$FALLBACK_CONTAINER_ID"
+  else
+    echo "No running containers found for service ending with '${SERVICE_NAME}'."
+    exit 1
+  fi
 fi
 
 # If multiple containers are found, let the user select one
@@ -39,7 +50,7 @@ if [ ${#CONTAINER_IDS[@]} -gt 1 ]; then
       echo "Invalid selection."
     fi
   done
-else
+elif [ ${#CONTAINER_IDS[@]} -eq 1 ]; then
   CONTAINER_ID=${CONTAINER_IDS[0]}
 fi
 
