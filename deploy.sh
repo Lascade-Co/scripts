@@ -30,6 +30,7 @@ set -a
 source .env
 set +a
 
+docker compose -f swarm.docker-compose.yml pull
 docker stack deploy -c swarm.docker-compose.yml "$STACK_NAME" --with-registry-auth -d
 
 echo -e "${COLOR_GREEN}Deployment successful.${NO_COLOR}"
