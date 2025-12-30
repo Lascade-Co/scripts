@@ -4,83 +4,127 @@ set -e
 
 # Check if a service name was provided
 if [ -z "$1" ]; then
-  echo "Usage: shell.sh <service_name> [optional] <command> [optional] <command_argument>"
+  echo "Usage: shell.sh <service_name> [command] [args...]"
   echo "Commands:"
   echo "  shell: Start an interactive bash shell in the container (default)"
   echo "  run <command>: Run a command in the container"
-  echo "  logs: Show logs for the container"
-  echo "  restart: Restart the container"
+  echo "  logs [tail_lines]: Show logs for the service (default tail: 100)"
+  echo "  restart: Restart the service"
+  echo "  stop: Stop the service (scale to 0)"
+  echo "  start: Start the service (scale to configured replicas)"
   exit 1
 fi
 
 SERVICE_NAME="$1"
-COMMAND="$2"
+COMMAND="${2:-shell}"
 
-if [ -z "$COMMAND" ]; then
-  COMMAND="shell"
-fi
-
-# Find all running containers for services ending with the given service name
-CONTAINER_IDS=($(docker ps --filter "name=_${SERVICE_NAME}\." --format "{{.ID}}"))
-
-if [ ${#CONTAINER_IDS[@]} -eq 0 ]; then
-  if [ "$COMMAND" == "restart" ]; then
-    echo "No running containers found for service ending with '${SERVICE_NAME}'. Attempting to infer stack from any running service..."
-    # Fallback: pick any running container that belongs to a Docker stack
-    FALLBACK_CONTAINER_ID=$(docker ps --filter "label=com.docker.stack.namespace" --format "{{.ID}}" | head -n 1)
-    if [ -z "$FALLBACK_CONTAINER_ID" ]; then
-      echo "No stack-labeled running containers found to infer stack. Cannot restart '${SERVICE_NAME}'."
-      exit 1
-    fi
-    CONTAINER_ID="$FALLBACK_CONTAINER_ID"
-  else
-    echo "No running containers found for service ending with '${SERVICE_NAME}'."
+# Get stack name from environment or use first stack
+if [ -z "$STACK_NAME" ]; then
+  STACK_NAME=$(docker stack ls --format "{{.Name}}" | head -n 1)
+  if [ -z "$STACK_NAME" ]; then
+    echo "No Docker stacks found and STACK_NAME environment variable not set."
     exit 1
   fi
+  echo "Using stack: $STACK_NAME"
 fi
 
-# If multiple containers are found, let the user select one
-if [ ${#CONTAINER_IDS[@]} -gt 1 ]; then
-  echo "Multiple containers found for service '${SERVICE_NAME}'. Select one:"
-  PS3="Enter the number of the container to connect to: "
-  select CONTAINER_ID in "${CONTAINER_IDS[@]}"; do
-    if [ -n "$CONTAINER_ID" ]; then
-      break
-    else
-      echo "Invalid selection."
-    fi
-  done
-elif [ ${#CONTAINER_IDS[@]} -eq 1 ]; then
-  CONTAINER_ID=${CONTAINER_IDS[0]}
-fi
-
-# Get stack name from container label
-STACK_NAME=$(docker inspect "$CONTAINER_ID" --format "{{ index .Config.Labels \"com.docker.stack.namespace\" }}")
 FULL_SERVICE_NAME="${STACK_NAME}_${SERVICE_NAME}"
 
-if [ "$COMMAND" == "shell" ]; then
-  # Start an interactive bash shell in the container
-  docker exec -it "$CONTAINER_ID" /bin/bash
-elif [ "$COMMAND" == "run" ]; then
-  if [ -z "$3" ]; then
-    echo "Usage: shell <service_name> run <command>"
+# Verify service exists
+if ! docker service inspect "$FULL_SERVICE_NAME" &> /dev/null; then
+  echo "Service '$FULL_SERVICE_NAME' not found."
+  exit 1
+fi
+
+if [ "$COMMAND" == "shell" ] || [ "$COMMAND" == "run" ]; then
+  # Find running tasks for the service
+  mapfile -t TASK_LINES < <(docker service ps "$FULL_SERVICE_NAME" \
+    --filter "desired-state=running" \
+    --format "{{.ID}}|{{.Node}}|{{.Name}}" \
+    --no-trunc)
+
+  if [ ${#TASK_LINES[@]} -eq 0 ]; then
+    echo "No running tasks found for service '$FULL_SERVICE_NAME'."
     exit 1
   fi
-  docker exec "$CONTAINER_ID" "${@:3}"
+
+  # If multiple tasks, let user select one
+  if [ ${#TASK_LINES[@]} -gt 1 ]; then
+    echo "Multiple tasks found for service '$FULL_SERVICE_NAME'. Select one:"
+    PS3="Enter the number of the task to connect to: "
+
+    # Create display array for selection
+    DISPLAY_OPTIONS=()
+    for line in "${TASK_LINES[@]}"; do
+      TASK_ID=$(echo "$line" | cut -d'|' -f1)
+      NODE_NAME=$(echo "$line" | cut -d'|' -f2)
+      TASK_NAME=$(echo "$line" | cut -d'|' -f3)
+      DISPLAY_OPTIONS+=("$TASK_NAME (Node: $NODE_NAME)")
+    done
+
+    select choice in "${DISPLAY_OPTIONS[@]}"; do
+      if [ -n "$choice" ]; then
+        # Get the index of selected option (REPLY is 1-based)
+        SELECTED_INDEX=$((REPLY - 1))
+        SELECTED_LINE="${TASK_LINES[$SELECTED_INDEX]}"
+        break
+      else
+        echo "Invalid selection."
+      fi
+    done
+  else
+    SELECTED_LINE="${TASK_LINES[0]}"
+  fi
+
+  TASK_ID=$(echo "$SELECTED_LINE" | cut -d'|' -f1)
+
+  # Get container ID from the task
+  CONTAINER_ID=$(docker inspect "$TASK_ID" \
+    --format "{{.Status.ContainerStatus.ContainerID}}" 2>/dev/null)
+
+  if [ -z "$CONTAINER_ID" ]; then
+    echo "Could not find container ID for task."
+    exit 1
+  fi
+
+  if [ "$COMMAND" == "shell" ]; then
+    docker exec -it "$CONTAINER_ID" /bin/bash
+  elif [ "$COMMAND" == "run" ]; then
+    if [ -z "$3" ]; then
+      echo "Usage: shell.sh <service_name> run <command>"
+      exit 1
+    fi
+    docker exec "$CONTAINER_ID" "${@:3}"
+  fi
+
 elif [ "$COMMAND" == "logs" ]; then
-  # Show logs for the container
-  docker logs -f "$CONTAINER_ID"
+  TAIL_LINES="${3:-100}"
+  docker service logs --timestamps --tail "$TAIL_LINES" --follow "$FULL_SERVICE_NAME"
+
 elif [ "$COMMAND" == "restart" ]; then
-  # Restart the container by scaling it down to 0 and then back to 1
-  echo "Stopping container..."
+  echo "Restarting service '$FULL_SERVICE_NAME'..."
+  docker service update --force "$FULL_SERVICE_NAME"
+  echo "Service restart initiated."
+
+elif [ "$COMMAND" == "stop" ]; then
+  echo "Stopping service '$FULL_SERVICE_NAME'..."
   docker service scale "${FULL_SERVICE_NAME}=0"
-  # Wait for the container to stop, and print a dot every second
-  while docker ps --filter "name=${FULL_SERVICE_NAME}\." --format "{{.ID}}" | grep -q .; do
-    echo -n "."
-    sleep 1
-  done
-  echo "Starting container..."
-  docker service scale "${FULL_SERVICE_NAME}=1"
+  echo "Service stopped."
+
+elif [ "$COMMAND" == "start" ]; then
+  # Get the configured replica count from service spec
+  REPLICA_COUNT=$(docker service inspect "$FULL_SERVICE_NAME" \
+    --format "{{.Spec.Mode.Replicated.Replicas}}" 2>/dev/null)
+
+  if [ -z "$REPLICA_COUNT" ] || [ "$REPLICA_COUNT" == "<no value>" ]; then
+    # Fallback to 1 if we can't determine or if it's a global service
+    REPLICA_COUNT=1
+  fi
+
+  echo "Starting service '$FULL_SERVICE_NAME' with $REPLICA_COUNT replica(s)..."
+  docker service scale "${FULL_SERVICE_NAME}=${REPLICA_COUNT}"
+  echo "Service started."
+
 else
   echo "Invalid command: $COMMAND"
   exit 1
