@@ -99,8 +99,7 @@ if [ "$COMMAND" == "shell" ] || [ "$COMMAND" == "run" ]; then
 
 elif [ "$COMMAND" == "logs" ]; then
   TAIL_LINES="${3:-100}"
-  docker service logs --timestamps --tail "$TAIL_LINES" --follow "$FULL_SERVICE_NAME"
-
+  docker service logs --timestamps --no-task-ids --tail "$TAIL_LINES" --follow "$FULL_SERVICE_NAME"
 elif [ "$COMMAND" == "restart" ]; then
   echo "Restarting service '$FULL_SERVICE_NAME'..."
   docker service update --force "$FULL_SERVICE_NAME"
