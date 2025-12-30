@@ -10,8 +10,7 @@ if [ -z "$1" ]; then
   echo "  run <command>: Run a command in the container"
   echo "  logs [tail_lines]: Show logs for the service (default tail: 100)"
   echo "  restart: Restart the service"
-  echo "  stop: Stop the service (scale to 0)"
-  echo "  start: Start the service (scale to configured replicas)"
+  echo "  scale <replicas>: Scale the service to specified replica count"
   exit 1
 fi
 
@@ -99,30 +98,46 @@ if [ "$COMMAND" == "shell" ] || [ "$COMMAND" == "run" ]; then
 
 elif [ "$COMMAND" == "logs" ]; then
   TAIL_LINES="${3:-100}"
-  docker service logs --timestamps --no-task-ids --tail "$TAIL_LINES" --follow "$FULL_SERVICE_NAME"
+  docker service logs --timestamps --no-task-ids --tail "$TAIL_LINES" --follow "$FULL_SERVICE_NAME" | \
+    sed -E 's/^([0-9]{4}-[0-9]{2}-[0-9]{2})T([0-9]{2}:[0-9]{2}:[0-9]{2})\.[0-9]+Z /\1 \2 /'
 elif [ "$COMMAND" == "restart" ]; then
-  echo "Restarting service '$FULL_SERVICE_NAME'..."
-  docker service update --force "$FULL_SERVICE_NAME"
-  echo "Service restart initiated."
+  # Get current replica count before stopping
+  CURRENT_REPLICAS=$(docker service ls --filter "name=${FULL_SERVICE_NAME}" --format "{{.Replicas}}" | cut -d'/' -f2)
 
-elif [ "$COMMAND" == "stop" ]; then
-  echo "Stopping service '$FULL_SERVICE_NAME'..."
-  docker service scale "${FULL_SERVICE_NAME}=0"
-  echo "Service stopped."
-
-elif [ "$COMMAND" == "start" ]; then
-  # Get the configured replica count from service spec
-  REPLICA_COUNT=$(docker service inspect "$FULL_SERVICE_NAME" \
-    --format "{{.Spec.Mode.Replicated.Replicas}}" 2>/dev/null)
-
-  if [ -z "$REPLICA_COUNT" ] || [ "$REPLICA_COUNT" == "<no value>" ]; then
-    # Fallback to 1 if we can't determine or if it's a global service
-    REPLICA_COUNT=1
+  if [ -z "$CURRENT_REPLICAS" ] || [ "$CURRENT_REPLICAS" -lt 1 ]; then
+    CURRENT_REPLICAS=1
   fi
 
-  echo "Starting service '$FULL_SERVICE_NAME' with $REPLICA_COUNT replica(s)..."
+  echo "Restarting service '$FULL_SERVICE_NAME'..."
+  echo "Stopping service..."
+  docker service scale "${FULL_SERVICE_NAME}=0"
+
+  echo "Waiting for service to stop..."
+  sleep 2
+
+  echo "Starting service with $CURRENT_REPLICAS replica(s)..."
+  docker service scale "${FULL_SERVICE_NAME}=${CURRENT_REPLICAS}"
+  echo "Service restarted."
+
+elif [ "$COMMAND" == "scale" ]; then
+  if [ -z "$3" ]; then
+    echo "Usage: shell.sh <service_name> scale <replicas>"
+    echo "Example: shell.sh server scale 0  # Stop service"
+    echo "         shell.sh server scale 3  # Scale to 3 replicas"
+    exit 1
+  fi
+
+  REPLICA_COUNT="$3"
+
+  # Validate replica count is a number
+  if ! [[ "$REPLICA_COUNT" =~ ^[0-9]+$ ]]; then
+    echo "Error: Replica count must be a valid number"
+    exit 1
+  fi
+
+  echo "Scaling service '$FULL_SERVICE_NAME' to $REPLICA_COUNT replica(s)..."
   docker service scale "${FULL_SERVICE_NAME}=${REPLICA_COUNT}"
-  echo "Service started."
+  echo "Service scaled."
 
 else
   echo "Invalid command: $COMMAND"
