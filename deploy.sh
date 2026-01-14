@@ -21,17 +21,25 @@ if [ -n "$1" ]; then
   ssh-add ~/.ssh/github || echo  -e "${COLOR_YELLOW}SSH Key ~/.ssh/github not found${NO_COLOR}"
 
   git fetch
-  git checkout $1
+  if git show-ref --verify --quiet "refs/remotes/origin/$1"; then
+    git checkout -B "$1" "origin/$1"
+    git pull --ff-only
+  else
+    git checkout "$1"
+    echo -e "${COLOR_YELLOW}Checked out '$1' in detached HEAD state; skipping 'git pull'.${NO_COLOR}"
+  fi
 fi
-
-git pull --recurse-submodules=on-demand
 
 set -a
 source .env
 set +a
 
-docker compose -f swarm.docker-compose.yml pull
-docker stack deploy -c swarm.docker-compose.yml "$STACK_NAME" --with-registry-auth -d
+RENDERED_SWARM_COMPOSE_FILE=/tmp/.swarm.docker-compose.rendered.yml
+
+docker compose -f base/swarm.docker-compose.yml -f swarm.docker-compose.yml config > "$RENDERED_SWARM_COMPOSE_FILE"
+
+docker compose -f "$RENDERED_SWARM_COMPOSE_FILE" pull
+docker stack deploy -c "$RENDERED_SWARM_COMPOSE_FILE" "$STACK_NAME" --with-registry-auth -d
 
 echo -e "${COLOR_GREEN}Deployment successful.${NO_COLOR}"
 

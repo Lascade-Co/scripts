@@ -25,7 +25,7 @@ fi
 read -p "Do you want to setup deployment scripts? [y/N]: " SETUP_DEPLOYMENT
 
 if [ "$SETUP_DEPLOYMENT" == "y" ]; then
-    # Create deployment scripts
+    # Create deployment scripts_dir
     echo "Linking deployment script..."
 
     SCRIPT_FILE=$(readlink -f -- "${BASH_SOURCE[0]}")
@@ -35,6 +35,7 @@ if [ "$SETUP_DEPLOYMENT" == "y" ]; then
     dirname "${SCRIPT_DIR}" | sudo tee /opt/project_folder
 
     chmod +x "$SCRIPT_DIR/deploy.sh"
+    chmod +x "$SCRIPT_DIR/shell.sh"
     sudo ln -s "$SCRIPT_DIR/deploy.sh" /bin/deploy || echo "Deployment script already linked"
     sudo ln -s "$SCRIPT_DIR/shell.sh" /bin/shell || echo "Shell script already linked"
 
