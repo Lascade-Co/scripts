@@ -30,6 +30,8 @@ if [ -n "$1" ]; then
   fi
 fi
 
+git pull --recurse-submodules=on-demand
+
 set -a
 source .env
 set +a
