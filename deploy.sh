@@ -43,6 +43,11 @@ RENDERED_SWARM_COMPOSE_FILE=/tmp/.swarm.docker-compose.rendered.yml
 
 docker compose -f base/swarm.docker-compose.yml -f swarm.docker-compose.yml config > "$RENDERED_SWARM_COMPOSE_FILE"
 
+# Fix quoted port numbers - Docker Swarm requires integers not strings
+sed -i.bak 's/published: "\([0-9]*\)"/published: \1/g' "$RENDERED_SWARM_COMPOSE_FILE"
+sed -i.bak 's/target: "\([0-9]*\)"/target: \1/g' "$RENDERED_SWARM_COMPOSE_FILE"
+rm -f "${RENDERED_SWARM_COMPOSE_FILE}.bak"
+
 docker compose -f "$RENDERED_SWARM_COMPOSE_FILE" pull
 docker stack deploy -c "$RENDERED_SWARM_COMPOSE_FILE" "$STACK_NAME" --with-registry-auth -d
 
