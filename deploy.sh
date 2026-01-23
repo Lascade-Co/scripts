@@ -32,7 +32,7 @@ fi
 
 # Only pull if we're on a branch (not in detached HEAD)
 if git symbolic-ref -q HEAD > /dev/null; then
-  git pull --recurse-submodules=on-demand
+  git pull --recurse-submodules
 fi
 
 set -a
