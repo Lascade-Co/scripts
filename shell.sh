@@ -99,7 +99,7 @@ if [ "$COMMAND" == "shell" ] || [ "$COMMAND" == "run" ]; then
 elif [ "$COMMAND" == "logs" ]; then
   TAIL_LINES="${3:-100}"
   docker service logs --timestamps --no-task-ids --tail "$TAIL_LINES" --follow "$FULL_SERVICE_NAME" | \
-    sed -E 's/^([0-9]{4}-[0-9]{2}-[0-9]{2})T([0-9]{2}:[0-9]{2}:[0-9]{2})\.[0-9]+Z /\1 \2 /'
+    sed -E 's/^([0-9]{4}-[0-9]{2}-[0-9]{2})T([0-9]{2}:[0-9]{2}:[0-9]{2})\.[0-9]+Z /\1 \2 /' | sort -k1
 elif [ "$COMMAND" == "restart" ]; then
   # Get current replica count before stopping
   CURRENT_REPLICAS=$(docker service ls --filter "name=${FULL_SERVICE_NAME}" --format "{{.Replicas}}" | cut -d'/' -f2)
